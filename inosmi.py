@@ -34,14 +34,15 @@ def clean_page(text):
     regRaquo = re.compile('&raquo;', flags=re.DOTALL)
     regLaquo = re.compile('&laquo;', flags=re.DOTALL)
     regNbsp = re.compile('&nbsp;', flags=re.DOTALL)
+    regQuot = re.compile('&quot;', flags=re.DOTALL)
     regTag = re.compile('<.*?>', flags=re.DOTALL)
     newText = regNbsp.sub(" ", str(newText))
     newText = regMdash.sub("–", str(newText)) # заменяем тире
+    newText = regQuot.sub('"', str(newText)) # заменяем кавычки
     newText = regRaquo.sub("»", str(newText)) # заменяем кавычки
     newText = regLaquo.sub("«", str(newText)) # заменяем кавычки
     newText = regAside.sub("", str(newText)) # удаляем ссылки на другие статьи
     newText = regTag.sub("", str(newText)) # удаляем тэги
-#    newText = newText[:-2]
     newText = newText.replace (r"\n", "\n")
     newText = str(newText)
     return newText
@@ -97,18 +98,19 @@ def meta(page):
         create = open(tablePath, 'w', encoding='utf-8')
         create.close()
     table = open(tablePath, 'a', encoding='utf-8')
-    infoString = '%s\t%s\t%s\t%s'
+    infoString = '%s\t%s\t%s\t%s\t%s'
     author = author_(page) # автор
     name = name_(page) # название перевода
-    link = "/Corpus/"+ name + ".txt"
-    orig_name = orig_name_(page) # название оригинала
-    table.write(infoString % (author, name, orig_name, link) + '\r\n')
+    link = "/Corpus/inosmi/"+ name + ".txt"
+    orig_name = orig_name_(page)[1:-4] # название оригинала
+    orig_link = "/Corpus/original/"+ orig_name + ".txt"
+    table.write(infoString % (author, name, orig_name, link, orig_link) + '\r\n')
     table.close()
     return 0
 
 #       _сохранение документа_
-def direct(name, page):
-    path = "/Corpus"
+def direct(name, page, folder):
+    path = "/Corpus"+ folder
     os.chdir(path)
     ouf=open(name+".txt", "w", encoding="utf-8")
     ouf.write(page)
@@ -116,14 +118,40 @@ def direct(name, page):
     return 0
 
 #       _очистка иностранного текста_
-def orig_clean_page():
+def orig_clean_page(text):
+    newText = re.compile('<p>.*?</p>"', flags=re.DOTALL) 
+    newText = newText.findall(text)
+    if newText == []:
+        newText = text
+        direct("draft",text,"")
+        newText = orig_clean_page_two()
+        os.remove('/Corpus/draft.txt')
+    else:
+        newText = '/n'.join(newText)
+        regMdash = re.compile('&mdash;', flags=re.DOTALL)
+        regRaquo = re.compile('&raquo;', flags=re.DOTALL)
+        regLaquo = re.compile('&laquo;', flags=re.DOTALL)
+        regNbsp = re.compile('&nbsp;', flags=re.DOTALL)
+        regQuot = re.compile('&quot;', flags=re.DOTALL)
+        regTag = re.compile('<.*?>', flags=re.DOTALL)
+        newText = regNbsp.sub(" ", str(newText))
+        newText = regMdash.sub("–", str(newText)) # заменяем тире
+        newText = regQuot.sub('"', str(newText)) # заменяем кавычки
+        newText = regRaquo.sub("»", str(newText)) # заменяем кавычки
+        newText = regLaquo.sub("«", str(newText)) # заменяем кавычки
+        newText = regTag.sub("", str(newText)) # удаляем тэги
+        newText = newText.replace (r"\n", "\n")
+        newText = str(newText)
+    return newText
+
+def orig_clean_page_two():
     path = "/Corpus"
     os.chdir(path)
     ouf=open("draft.txt", "r", encoding="utf-8")
     text = ouf.readlines()
     newText = ''
     for i in range (len(text)):
-        if text[i].count ('{') + text[i].count ('}') + text[i].count ('[') + text[i].count (']') + text[i].count ('var') + text[i].count ('=') + text[i].count ('/') + text[i].count ('|') + text[i].count ("*")  + text[i].count ("_") + text[i].count ("#") + text[i].count ("$") + text[i].count ("()") == 0:
+        if text[i].count ('{') + text[i].count ('}') + text[i].count ('[') + text[i].count (']') + text[i].count ('var') + text[i].count ('=') + text[i].count ('/') + text[i].count ('|') + text[i].count ("*")  + text[i].count ("_") + text[i].count ("#") + text[i].count ("()") == 0:
             regTag = re.compile('<.*?>', flags=re.DOTALL)
             newText = regTag.sub("", str(newText)) # удаляем тэги
             regT = re.compile('\t', flags=re.DOTALL)
@@ -141,11 +169,9 @@ def orig_clean_page():
     ouf.close()
     return newText
 
-
         
 #       _краулер_
 def crawler(Urls, a):
-    b = len (Urls)
     for i in range(len(Urls)):
         print(i, Urls[i][25:])
         page = download_page("http://inosmi.ru/" + Urls[i][25:])
@@ -154,10 +180,11 @@ def crawler(Urls, a):
         j = 0
         for j in range (len(NewUrls)):
             if NewUrls[j] not in Urls:
-                Urls.append(NewUrls[j])
-        time.sleep(1) 
-    if b < 20:
-        crawler (Urls, b)
+                if len(Urls) < 200:
+                    Urls.append(NewUrls[j])
+        time.sleep(2) 
+    if len(Urls) < 200:
+        crawler (Urls, len(Urls))
     return Urls           
 
 
@@ -169,23 +196,22 @@ def main ():
     Urls = list(Urls)
     Urls = crawler(Urls, 0)
     for i in range (len (Urls)):
-        if  (Urls[i][25:30])!="overv" and (Urls[i][25:30])!="video":
-            translated = download_page("http://inosmi.ru/" + Urls[i][25:]) #скачиваем перевод
-            name = name_(translated)
-            orig_name = orig_name_(translated)
-            if orig_name != 0: 
-                link = link_(translated)[9:-1]
-                orig_name = orig_name[1:-4]
-                origin = download_page(link) #скачиваем оригинал
-                if origin != -1:
-                    meta(translated)
-                    print(i)
-                    translated = clean_page(translated)
-                    direct(name,translated)
-                    direct("draft",origin)
-                    newText = orig_clean_page()
-                    direct(orig_name,newText)
-                    os.remove('/Corpus/draft.txt')
+            if  (Urls[i][25:30])!="overv" and (Urls[i][25:30])!="video":
+                translated = download_page("http://inosmi.ru/" + Urls[i][25:]) #скачиваем перевод
+                name = name_(translated)
+                orig_name = orig_name_(translated)
+                if orig_name != 0 and orig_name[1:5] != 'http': 
+                    link = link_(translated)[9:-1]
+                    orig_name = orig_name[1:-4]
+                    origin = download_page(link) #скачиваем оригинал
+                    if origin != -1:
+                        origin = orig_clean_page(origin)
+                        print (origin)
+                        if origin != "":
+                            meta(translated)
+                            translated = clean_page(translated)
+                            direct(name,translated, "/inosmi")
+                            direct(orig_name,origin, "/original")
     return (0)
 
 main()
